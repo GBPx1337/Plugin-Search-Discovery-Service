@@ -1,6 +1,6 @@
 # Plugin Search & Discovery Service
 
-Backend-сервис поиска плагинов для маркетплейса.
+Backend-микросервис поиска плагинов для маркетплейса.
 
 ## Стек
 - Rust
