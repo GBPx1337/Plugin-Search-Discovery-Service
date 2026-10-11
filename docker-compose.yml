@@ -1,3 +1,4 @@
+name: plugin_search
 services:
   postgres:
     image: postgres:16
