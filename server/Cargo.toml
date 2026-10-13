@@ -3,6 +3,18 @@ name = "server"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[[bin]]
+name = "seed"
+path = "src/bin/seed.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 axum = "0.7"
@@ -27,3 +39,7 @@ thiserror = "1"
 serde = { version = "1", features = ["derive"] }
 
 dotenvy = "0.15"
+
+fake = { version = "2", features = ["chrono", "rust_decimal"] }
+rand = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
