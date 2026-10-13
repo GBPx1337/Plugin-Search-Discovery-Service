@@ -3,7 +3,7 @@
 **/target/
 Cargo.lock.bak
 *.rs.bk
-/migration/src/migration_command
+/migration_commands
 
 # IDE
 .idea/
