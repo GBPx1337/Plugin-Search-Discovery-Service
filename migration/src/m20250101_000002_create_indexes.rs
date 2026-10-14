@@ -29,7 +29,7 @@ impl MigrationTrait for Migration {
         )
             .await?;
 
-        // B-tree для сортировки и фильтра по цене
+        // B-tree для фильтра и сортировки по цене
         conn.execute_unprepared(
             "CREATE INDEX IF NOT EXISTS plugins_price_idx \
              ON plugins (price)",
@@ -45,9 +45,8 @@ impl MigrationTrait for Migration {
 
         // B-tree для сортировки по скачиваниям
         conn.execute_unprepared(
-            "CREATE INDEX IF NOT EXISTS plugins_published_idx \
-             ON plugins (updated_at DESC, id) \
-             WHERE status = 'published'::plugin_status",  // <-- явный каст
+            "CREATE INDEX IF NOT EXISTS plugins_downloads_idx \
+             ON plugins (downloads)",
         )
             .await?;
 
@@ -65,11 +64,13 @@ impl MigrationTrait for Migration {
         )
             .await?;
 
-        // Частичный индекс: большинство запросов смотрит только published
+        // Частичный индекс: большинство запросов смотрит только published.
+        // Явный каст 'published'::plugin_status — совпадает с типом колонки.
+        // updated_at DESC, id — под сортировку newest с tie-breaker по id.
         conn.execute_unprepared(
             "CREATE INDEX IF NOT EXISTS plugins_published_idx \
              ON plugins (updated_at DESC, id) \
-             WHERE status = 'published'",
+             WHERE status = 'published'::plugin_status",
         )
             .await?;
 
