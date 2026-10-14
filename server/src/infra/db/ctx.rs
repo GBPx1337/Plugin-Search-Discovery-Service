@@ -8,6 +8,8 @@ use crate::dom::plugins::errors::PluginError;
 use crate::dom::plugins::repo::PluginRepo;
 use crate::dom::plugins::uow::PluginUoW;
 use crate::infra::db::persist::plugins::repo::RepoImpl;
+use crate::shared::Page;
+use crate::dom::plugins::model::{Plugin, PluginId, SearchCriteria, UpsertOutcome};
 
 #[derive(Clone)]
 pub struct AppCtx {
@@ -61,5 +63,29 @@ impl PluginUoW for AppCtx {
                 Err(e)
             }
         }
+    }
+}
+
+#[async_trait]
+impl PluginRepo for AppCtx {
+    async fn search(
+        &self,
+        criteria: SearchCriteria,
+    ) -> Result<Page<Plugin>, PluginError> {
+        self.plugins().search(criteria).await
+    }
+
+    async fn upsert(&self, plugin: Plugin) -> Result<UpsertOutcome, PluginError> {
+        // На «свободном» соединении upsert НЕ БЕЗОПАСЕН из-за race condition.
+        // Но этот метод не должен вызываться напрямую: app всегда вызывает
+        // upsert через uow.transaction(), который даёт репозиторий с транзакцией.
+        //
+        // Оставляем метод на случай прямого вызова — предупредим в логе.
+        tracing::warn!("AppCtx::upsert called outside of transaction — risk of race condition");
+        self.plugins().upsert(plugin).await
+    }
+
+    async fn delete(&self, id: PluginId) -> Result<(), PluginError> {
+        self.plugins().delete(id).await
     }
 }
