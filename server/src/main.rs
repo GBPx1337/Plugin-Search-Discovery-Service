@@ -11,6 +11,6 @@ use tokio::net::TcpListener;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().init();
-    tracing::info!("server binary — fill me in at step 13");
+    tracing::info!("server binary");
     Ok(())
 }

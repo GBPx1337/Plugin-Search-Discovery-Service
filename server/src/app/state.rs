@@ -1,25 +1,46 @@
-use crate::app::services::plugin_search_service::PluginSearchService;
-use crate::dom::plugins::repo::PluginRepo;
-use crate::dom::plugins::uow::PluginUoW;
+use std::sync::Arc;
 
-/// Состояние приложения для HTTP-слоя.
-///
-/// Generic по `C: PluginRepo + PluginUoW` — `present` не знает, SeaORM там
-/// или in-memory реализация.
-pub struct AppState<C: PluginRepo + PluginUoW> {
-    pub plugin_search: PluginSearchService<C>,
+use crate::app::services::plugin_search_service::PluginSearchService;
+use crate::dom::plugins::model::{Plugin, SearchCriteria};
+use crate::dom::plugins::errors::PluginError;
+use crate::shared::Page;
+
+/// Трейт-фасад сервиса поиска, чтобы AppState не был generic.
+#[async_trait::async_trait]
+pub trait PluginSearch: Send + Sync + 'static {
+    async fn search(&self, criteria: SearchCriteria) -> Result<Page<Plugin>, PluginError>;
 }
 
-impl<C: PluginRepo + PluginUoW> Clone for AppState<C> {
-    fn clone(&self) -> Self {
-        Self {
-            plugin_search: self.plugin_search.clone(),
-        }
+#[async_trait::async_trait]
+impl<C> PluginSearch for PluginSearchService<C>
+where
+    C: crate::dom::plugins::repo::PluginRepo
+    + crate::dom::plugins::uow::PluginUoW
+    + Send
+    + Sync
+    + 'static,
+{
+    async fn search(&self, criteria: SearchCriteria) -> Result<Page<Plugin>, PluginError> {
+        PluginSearchService::search(self, criteria).await
     }
 }
 
-impl<C: PluginRepo + PluginUoW> AppState<C> {
-    pub fn new(plugin_search: PluginSearchService<C>) -> Self {
-        Self { plugin_search }
+#[derive(Clone)]
+pub struct AppState {
+    pub plugin_search: Arc<dyn PluginSearch>,
+}
+
+impl AppState {
+    pub fn new<C>(plugin_search: PluginSearchService<C>) -> Self
+    where
+        C: crate::dom::plugins::repo::PluginRepo
+        + crate::dom::plugins::uow::PluginUoW
+        + Send
+        + Sync
+        + 'static,
+    {
+        Self {
+            plugin_search: Arc::new(plugin_search),
+        }
     }
 }

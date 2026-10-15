@@ -842,7 +842,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2329,13 +2329,16 @@ dependencies = [
  "clap",
  "dotenvy",
  "fake",
+ "http-body-util",
  "rand 0.8.8",
  "rust_decimal",
  "sea-orm",
  "sea-query 0.31.1",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "uuid",
