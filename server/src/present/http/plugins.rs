@@ -12,7 +12,6 @@ use crate::app::state::AppState;
 use crate::dom::plugins::errors::PluginError;
 use crate::dom::plugins::model::{Plugin, SearchCriteria, SortOrder, MAX_LIMIT};
 use crate::shared::Page;
-use crate::dom::plugins::repo::PluginRepo;
 
 /// DTO query-параметров поиска.
 #[derive(Debug, Deserialize)]

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sea_orm::sea_query::{ArrayType, Condition, Expr, ExprTrait, Order, SimpleExpr, Value};
+use sea_orm::sea_query::{ArrayType, Condition, Expr, Order, SimpleExpr, Value};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait,
     QueryFilter, QueryOrder, QuerySelect,
@@ -217,7 +217,7 @@ fn content_eq(a: &Plugin, b: &Plugin) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeDelta, Utc};
+    use chrono::Utc;
     use rust_decimal::Decimal;
     use sea_orm::{ConnectionTrait, Database};
     use uuid::Uuid;

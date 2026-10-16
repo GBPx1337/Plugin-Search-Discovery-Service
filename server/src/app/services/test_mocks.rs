@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use rust_decimal::Decimal;
 
 use crate::dom::plugins::errors::PluginError;
 use crate::dom::plugins::model::{

@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use uuid::Uuid;
 
 use crate::dom::plugins::errors::PluginError;
 use crate::dom::plugins::model::{Plugin, PluginId, SearchCriteria, UpsertOutcome};

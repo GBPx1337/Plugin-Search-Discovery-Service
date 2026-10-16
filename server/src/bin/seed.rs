@@ -5,9 +5,9 @@
 //!
 //! Требует `DATABASE_URL` в окружении (или `.env`).
 
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use clap::Parser;
-use fake::faker::lorem::en::{Paragraph, Sentence, Words};
+use fake::faker::lorem::en::{Sentence, Words};
 use fake::Fake;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
