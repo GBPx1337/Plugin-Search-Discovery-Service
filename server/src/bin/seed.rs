@@ -174,7 +174,7 @@ fn generate_plugin(rng: &mut StdRng) -> Plugin {
 fn generate_name(rng: &mut StdRng) -> String {
     let kw = KEYWORDS[rng.gen_range(0..KEYWORDS.len())];
     let words: Vec<String> = Words(1..3).fake_with_rng(rng);
-    let suffix = words.join(" "); // объединяем в строку через пробел
+    let suffix = words.join(" ");
     format!("{kw} {suffix}")
         .split_whitespace()
         .map(capitalize)
@@ -209,7 +209,6 @@ fn generate_price(rng: &mut StdRng) -> i32 {
     if rng.gen_bool(0.10) {
         0
     } else {
-        // Логарифмическое распределение: много дешёвых, мало дорогих
         let exp = rng.gen_range(8..=14); // 2^8 = 256, 2^14 = 16384
         let base = 1i32 << exp;
         let jitter = rng.gen_range(0..(base / 2).max(1));
@@ -250,7 +249,6 @@ fn generate_status(rng: &mut StdRng) -> PluginStatus {
 fn generate_updated_at(rng: &mut StdRng) -> chrono::DateTime<chrono::FixedOffset> {
     use chrono::TimeDelta;
 
-    // За последние 2 года, экспоненциально смещено к «недавно».
     let r: f64 = rng.gen_range(0.0..1.0);
     let max_days = 730.0;
     let days_ago = (r.powi(2) * max_days) as i64;

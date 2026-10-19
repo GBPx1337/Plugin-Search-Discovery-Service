@@ -1,11 +1,10 @@
-# Rust
+
 /target/
 **/target/
 Cargo.lock.bak
 *.rs.bk
 /migration_commands
 
-# IDE
 .idea/
 .vscode/*
 !.vscode/settings.json
@@ -14,20 +13,16 @@ Cargo.lock.bak
 *.swo
 *~
 
-# Окружение
 .env
 .env.local
 .env.*.local
 !.env.example
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Логи, временные файлы
 *.log
 /tmp/
 /coverage/
 
-# Docker (если появятся локальные данные)
 /docker-data/

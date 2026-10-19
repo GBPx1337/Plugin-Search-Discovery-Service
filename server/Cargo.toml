@@ -26,7 +26,7 @@ sea-orm = { version = "2", features = [
     "sqlx-postgres",
     "runtime-tokio-rustls",
     "macros",
-    "postgres-array",       # <- критично для TEXT[]
+    "postgres-array",
 ] }
 sea-query = "0.31"
 

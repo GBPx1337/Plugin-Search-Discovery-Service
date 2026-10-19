@@ -1,5 +1,5 @@
-name: plugin_search
 services:
+  # 1. База данных
   postgres:
     image: postgres:16
     container_name: plugin_search_postgres
@@ -19,6 +19,41 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+
+  # 2. Миграции (одноразовый запуск)
+  migrate:
+    build:
+      context: .
+      target: migrate
+    container_name: plugin_search_migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/plugin_search
+      RUST_LOG: info
+    restart: "no"
+    command: ["migration", "up"]
+
+  # 3. Сервер (стартует после успешной миграции)
+  server:
+    build:
+      context: .
+      target: server
+    container_name: plugin_search_server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/plugin_search
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      RUST_LOG: info,sea_orm=warn,sqlx=warn
+    ports:
+      - "8080:8080"
 
 volumes:
   pgdata:
