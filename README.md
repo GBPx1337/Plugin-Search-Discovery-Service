@@ -48,7 +48,41 @@ Backend-сервис поиска, фильтрации и сортировки 
 
 ---
 
+## Быстрый старт
+
+```bash
+docker compose up -d --build
+curl http://localhost:8080/health   # ok
+
+# 100k записей для проверки производительности (~10-30 сек в release)
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/plugin_search \
+    cargo run --release -p server --bin seed -- --count 100000 --truncate --seed 42
+```
+
+**Сервисы в compose:**
+
+| Сервис | Роль | Статус после up |
+|---|---|---|
+| `postgres` | PostgreSQL 16 | `Up (healthy)` |
+| `migration` | Применяет миграции (one-shot) | `Exited (0)` |
+| `server` | HTTP API :8080 | `Up` |
+
+**API:**
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| `GET` | `/api/v1/plugins/search` | Поиск с фильтрами и пагинацией |
+| `PUT` | `/api/v1/index/plugins/{id}` | Upsert проекции (идемпотентно, защита по `updated_at`) |
+| `DELETE` | `/api/v1/index/plugins/{id}` | Soft delete (tombstone), идемпотентно |
+| `GET` | `/health` | Health-check |
+
+---
+
 ## 1. Архитектура
+
+DDD / Layered Architecture. Слои общаются только через контракты; инфраструктура и HTTP изолированы от домена.
+
+**Слои и содержимое:**
 
 | Слой | Ответственность | Может импортировать |
 |---|---|---|
@@ -58,6 +92,69 @@ Backend-сервис поиска, фильтрации и сортировки 
 | `infra` | SeaORM entity, `RepoImpl<'a, C: ConnectionTrait>`, `AppCtx`, миграции | `dom`, `app`, `shared` |
 | `present` | Axum-хендлеры, DTO, `ApiError` | `app`, `shared` |
 | `main.rs` + `config.rs` | Composition root, сборка зависимостей, конфиг | всё |
+
+**Направления зависимостей:**
+
+| Из слоя | В слой | Разрешено |
+|---|---|---|
+| `present` | `app`, `shared` | да |
+| `app` | `dom`, `shared` | да |
+| `infra` | `dom`, `app`, `shared` | да |
+| `dom` | `shared` | да |
+| `shared` | внешние крейты | да |
+| `present` | `infra` | **запрещено** |
+| `app` | `infra`, `present` | **запрещено** |
+| `dom` | `app`, `infra`, `present` | **запрещено** |
+| `shared` | `dom`, `app`, `infra`, `present` | **запрещено** |
+| `main.rs` | все слои | исключение (composition root) |
+
+### Ключевые контракты
+
+**`dom/plugins/repo.rs` — `PluginRepo`:**
+
+```rust
+#[async_trait]
+pub trait PluginRepo: Send + Sync {
+    async fn search(&self, criteria: SearchCriteria) -> Result<Page<Plugin>, PluginError>;
+    async fn upsert(&self, plugin: Plugin) -> Result<UpsertOutcome, PluginError>;
+    async fn delete(&self, id: PluginId) -> Result<(), PluginError>;
+}
+```
+
+**`dom/plugins/uow.rs` — `PluginUoW`:**
+
+```rust
+#[async_trait]
+pub trait PluginUoW: Send + Sync {
+    async fn transaction<T, F>(&self, f: F) -> Result<T, PluginError>
+    where
+        T: Send + 'static,
+        F: for<'a> FnOnce(&'a dyn PluginRepo)
+            -> Pin<Box<dyn Future<Output = Result<T, PluginError>> + Send + 'a>>
+            + Send;
+}
+```
+
+`app` решает, **когда** нужна транзакция, `infra` — **как** её открыть. `app` не знает про `DatabaseConnection`.
+
+### Unit of Work
+
+**Реализация трейтов на `AppCtx` (`infra/db/ctx.rs`):**
+
+| Трейт | Что даёт | Когда используется |
+|---|---|---|
+| `PluginRepo for AppCtx` | Репозиторий поверх `&DatabaseConnection` | `search`, `delete` — одиночные SQL, транзакция не нужна |
+| `PluginUoW for AppCtx` | `transaction(...)`, внутри — `RepoImpl` поверх `&DatabaseTransaction` | `upsert` — check-then-act, нужна атомарность |
+
+`upsert` в `app` вызывается через `transaction`, потому что это SELECT + решение + INSERT/UPDATE.
+
+### Проверка границ
+
+| Проверка | Команда | Ожидаемо |
+|---|---|---|
+| `dom` не знает SeaORM | `grep -r "sea_orm" server/src/dom/` | пусто |
+| `app` не знает SeaORM | `grep -r "sea_orm" server/src/app/` | пусто |
+| `present` не знает infra | `grep -r "use crate::infra" server/src/present/` | пусто |
 
 ---
 
