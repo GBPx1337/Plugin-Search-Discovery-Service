@@ -8,7 +8,7 @@ COPY server/Cargo.toml server/Cargo.toml
 COPY migration/Cargo.toml migration/Cargo.toml
 
 RUN mkdir -p server/server/src/bin migration/src && \
-    echo "fn main() {}" > server/server//src/main.rs && \
+    echo "fn main() {}" > server/server/src/main.rs && \
     echo "" > server/server/src/lib.rs && \
     echo "fn main() {}" > server/server/src/bin/seed.rs && \
     echo "fn main() {}" > server/server/src/bin/probe.rs && \

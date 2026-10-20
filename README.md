@@ -708,7 +708,7 @@ let read_ctx  = AppCtx::new(read_db);
 ```
 .
 ├── Cargo.toml / Cargo.lock
-├── Dockerfile              # multi-stage: builder + server + migration
+├── Dockerfile              # multi-stage: builder + server + migration. Корневая папка называлась так же server, поэтому встречается `server/server/...`
 ├── docker-compose.yml      # postgres + migration + server
 ├── .env.example
 ├── manual_test.html        # ручное тестирование (поиск / PUT / DELETE)
