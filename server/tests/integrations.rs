@@ -28,12 +28,9 @@ async fn setup() -> Arc<AppCtx> {
     let url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set to a test database");
     let db = Database::connect(&url).await.expect("connect to db");
-
-    // Применяем миграции (идемпотентно).
-    migration::Migrator::up(&db, None).await.expect("migrate");
+    Migrator::up(&db, None).await.expect("migrate");
 
     db.execute_unprepared("TRUNCATE plugins").await.unwrap();
-
     Arc::new(AppCtx::new(db))
 }
 
@@ -49,9 +46,7 @@ fn make_plugin(
     updated_at_offset_hours: i64,
 ) -> Plugin {
     let ts = Utc::now() + TimeDelta::hours(updated_at_offset_hours);
-    // Postgres TIMESTAMPTZ хранит с точностью до микросекунд (6 знаков).
-    // Обрезаем, чтобы значение в памяти совпадало с тем, что окажется в БД,
-    // иначе повторный upsert с тем же updated_at даст Greater - Updated.
+    // Сопостовление временных данных
     let ts = chrono::DateTime::<Utc>::from_timestamp_micros(ts.timestamp_micros())
         .expect("valid timestamp")
         .fixed_offset();
@@ -394,4 +389,89 @@ async fn extra_pagination_pages() {
     assert_eq!(page.items.len(), 5);
     assert_eq!(page.total, 25);
     assert!(page.items.iter().all(|p| p.downloads < 10));
+}
+
+#[tokio::test]
+#[serial]
+async fn tombstone_delete_hides_from_search() {
+    let ctx = setup().await;
+    let p = make_plugin("A", "d", "c", &[], 0, "4", 0, PluginStatus::Published, 0);
+    let id = p.id;
+    insert(&ctx, p).await;
+
+    // до удаления — видна
+    let page = search(&ctx, criteria()).await.unwrap();
+    assert_eq!(page.total, 1);
+
+    ctx.plugins().delete(id).await.unwrap();
+
+    // после удаления — не видна
+    let page = search(&ctx, criteria()).await.unwrap();
+    assert_eq!(page.total, 0);
+}
+
+// Tombstone: повторный delete идемпотентен
+
+#[tokio::test]
+#[serial]
+async fn tombstone_delete_is_idempotent() {
+    let ctx = setup().await;
+    let p = make_plugin("A", "d", "c", &[], 0, "4", 0, PluginStatus::Published, 0);
+    let id = p.id;
+    insert(&ctx, p).await;
+
+    assert!(ctx.plugins().delete(id).await.is_ok());
+    assert!(ctx.plugins().delete(id).await.is_ok());
+
+    let page = search(&ctx, criteria()).await.unwrap();
+    assert_eq!(page.total, 0);
+}
+
+// Tombstone: запоздавший PUT не воскрешает
+
+#[tokio::test]
+#[serial]
+async fn tombstone_rejects_stale_put_after_delete() {
+    use server::dom::plugins::model::UpsertOutcome;
+
+    let ctx = setup().await;
+    let mut p = make_plugin("A", "d", "c", &[], 0, "4", 0, PluginStatus::Published, 0);
+    let id = p.id;
+    insert(&ctx, p.clone()).await;
+
+    ctx.plugins().delete(id).await.unwrap();
+
+    // PUT с updated_at СТАРЕЕ deleted_at
+    p.updated_at = p.updated_at - TimeDelta::hours(1);
+    let outcome = insert(&ctx, p).await;
+    assert_eq!(outcome, UpsertOutcome::DeletedStale);
+
+    // запись остаётся удалённой
+    let page = search(&ctx, criteria()).await.unwrap();
+    assert_eq!(page.total, 0);
+}
+
+// Tombstone: PUT с более новым updated_at воскрешает
+
+#[tokio::test]
+#[serial]
+async fn tombstone_revives_with_newer_put() {
+    use server::dom::plugins::model::UpsertOutcome;
+
+    let ctx = setup().await;
+    let mut p = make_plugin("A", "d", "c", &[], 0, "4", 0, PluginStatus::Published, 0);
+    let id = p.id;
+    insert(&ctx, p.clone()).await;
+
+    ctx.plugins().delete(id).await.unwrap();
+
+    // PUT с updated_at НОВЕЕ deleted_at
+    p.updated_at = p.updated_at + TimeDelta::hours(1);
+    let outcome = insert(&ctx, p).await;
+    assert_eq!(outcome, UpsertOutcome::Updated);
+
+    // запись снова видна
+    let page = search(&ctx, criteria()).await.unwrap();
+    assert_eq!(page.total, 1);
+    assert_eq!(page.items[0].id, id);
 }

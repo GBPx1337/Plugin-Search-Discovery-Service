@@ -62,6 +62,20 @@ impl<'a, C: ConnectionTrait + Send + Sync> PluginRepo for RepoImpl<'a, C> {
                 Ok(UpsertOutcome::Created)
             }
             Some(current) => {
+                //TOMBSTONE: запись удалена
+                if let Some(deleted_at) = current.deleted_at {
+                    if plugin.updated_at <= deleted_at {
+                        return Ok(UpsertOutcome::DeletedStale);
+                    }
+                    let active = mapping::to_active_model(&plugin);
+                    PluginEntity::update(active)
+                        .exec(self.conn())
+                        .await
+                        .map_err(|e| PluginError::Internal(e.into()))?;
+                    return Ok(UpsertOutcome::Updated);
+                }
+
+                //TOMBSTONE нет: обычная логика
                 use std::cmp::Ordering;
                 match plugin.updated_at.cmp(&current.updated_at) {
                     Ordering::Less => Ok(UpsertOutcome::Stale),
@@ -87,10 +101,18 @@ impl<'a, C: ConnectionTrait + Send + Sync> PluginRepo for RepoImpl<'a, C> {
     }
 
     async fn delete(&self, id: PluginId) -> Result<(), PluginError> {
-        PluginEntity::delete_by_id(id.into_inner())
+        use sea_orm::sea_query::Expr;
+
+        let now = chrono::Utc::now().fixed_offset();
+
+        PluginEntity::update_many()
+            .col_expr(Column::DeletedAt, Expr::value(now))
+            .filter(Column::Id.eq(id.into_inner()))
+            .filter(Column::DeletedAt.is_null())   //повторный delete не меняет deleted_at
             .exec(self.conn())
             .await
             .map_err(|e| PluginError::Internal(e.into()))?;
+
         Ok(())
     }
 }
@@ -141,6 +163,7 @@ fn build_where(criteria: &SearchCriteria) -> Condition {
     let mut cond = Condition::all();
 
     cond = cond.add(Column::Status.eq("published"));
+    cond = cond.add(Column::DeletedAt.is_null());
 
     if let Some(q) = criteria.q.as_deref() {
         let pattern = format!("%{}%", escape_like(q));
@@ -200,7 +223,7 @@ fn build_order(criteria: &SearchCriteria) -> Vec<(SimpleExpr, Order)> {
     }
 }
 
-/// Сравнивает содержимое плагинов, **исключая** `updated_at`.
+/// Сравнивает содержимое плагинов, исключая `updated_at`.
 fn content_eq(a: &Plugin, b: &Plugin) -> bool {
     a.id == b.id
         && a.name == b.name

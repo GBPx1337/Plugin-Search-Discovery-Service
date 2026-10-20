@@ -8,7 +8,6 @@ impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let conn = manager.get_connection();
 
-        // GIN + pg_trgm для подстрочного поиска по name (регистронезависимый)
         conn.execute_unprepared(
             "CREATE INDEX IF NOT EXISTS plugins_name_trgm_idx \
              ON plugins USING gin (name gin_trgm_ops)",
@@ -64,9 +63,6 @@ impl MigrationTrait for Migration {
         )
             .await?;
 
-        // Частичный индекс: большинство запросов смотрит только published.
-        // Явный каст 'published'::plugin_status — совпадает с типом колонки.
-        // updated_at DESC, id — под сортировку newest с tie-breaker по id.
         conn.execute_unprepared(
             "CREATE INDEX IF NOT EXISTS plugins_published_idx \
              ON plugins (updated_at DESC, id) \

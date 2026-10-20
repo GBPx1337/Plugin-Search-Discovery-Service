@@ -188,6 +188,7 @@ pub async fn index_plugin(
         UpsertOutcome::NoOp => (StatusCode::OK, "noop"),
         UpsertOutcome::Stale => (StatusCode::CONFLICT, "stale"),
         UpsertOutcome::Conflict => (StatusCode::CONFLICT, "conflict"),
+        UpsertOutcome::DeletedStale => (StatusCode::CONFLICT, "deleted_stale"),
     };
 
     Ok((http_status, Json(IndexResponse { outcome: label })))

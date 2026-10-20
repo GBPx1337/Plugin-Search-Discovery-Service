@@ -28,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
     opt.max_connections(cfg.db_max_connections)
         .min_connections(1)
         .connect_timeout(cfg.db_connect_timeout)
-        .sqlx_logging(false); // не логируем каждый SQL в info
+        .sqlx_logging(false);
     let db = Database::connect(opt).await?;
     tracing::info!("connected to database");
 

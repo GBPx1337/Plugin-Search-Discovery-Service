@@ -2,6 +2,7 @@ pub use sea_orm_migration::prelude::*;
 
 mod m20250101_000001_create_plugins;
 mod m20250101_000002_create_indexes;
+mod m20250101_000003_add_tombstone;
 
 pub struct Migrator;
 
@@ -11,6 +12,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20250101_000001_create_plugins::Migration),
             Box::new(m20250101_000002_create_indexes::Migration),
+            Box::new(m20250101_000003_add_tombstone::Migration),
         ]
     }
 }

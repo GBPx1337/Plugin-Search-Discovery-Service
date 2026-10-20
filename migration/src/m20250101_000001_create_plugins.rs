@@ -7,13 +7,10 @@ pub struct Migration;
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         let conn = manager.get_connection();
-
-        // 1. Расширение для подстрочного поиска
+        
         conn.execute_unprepared("CREATE EXTENSION IF NOT EXISTS pg_trgm")
             .await?;
 
-        // 2. Нативный ENUM. CREATE TYPE не поддерживает IF NOT EXISTS,
-        //    поэтому оборачиваем в DO-блок и ловим duplicate_object.
         conn.execute_unprepared(
             "DO $$ BEGIN \
                 CREATE TYPE plugin_status AS ENUM ('draft', 'published', 'archived'); \

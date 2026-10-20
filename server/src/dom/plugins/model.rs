@@ -30,6 +30,7 @@ pub enum PluginStatus {
     Archived,
 }
 
+
 impl PluginStatus {
     /// Только опубликованные плагины видны в поиске.
     pub fn is_searchable(&self) -> bool {
@@ -50,6 +51,7 @@ pub struct Plugin {
     pub downloads: i64,
     pub status: PluginStatus,
     pub updated_at: chrono::DateTime<chrono::FixedOffset>,
+
 }
 
 /// Способ сортировки результатов поиска.
@@ -145,6 +147,7 @@ pub enum UpsertOutcome {
     NoOp,
     Stale,
     Conflict,
+    DeletedStale,
 }
 
 #[cfg(test)]

@@ -15,6 +15,7 @@ pub struct Model {
     pub downloads: i64,
     pub status: PluginStatus,
     pub updated_at: DateTimeWithTimeZone,
+    pub deleted_at: Option<DateTimeWithTimeZone>,
 }
 
 #[derive(

@@ -55,6 +55,7 @@ pub fn to_active_model(p: &Plugin) -> crate::infra::db::entities::plugin::Active
         downloads: Set(p.downloads),
         status: Set(p.status.into()),
         updated_at: Set(p.updated_at),
+        deleted_at: Set(None),
     }
 }
 
@@ -86,6 +87,7 @@ mod tests {
             downloads: 12500,
             status: DbStatus::Published,
             updated_at: now,
+            deleted_at: None,
         };
         let p: Plugin = m.clone().into();
         assert_eq!(p.name, "PDF Export");
