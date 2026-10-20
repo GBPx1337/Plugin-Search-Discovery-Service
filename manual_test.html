@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Plugin Search — Manual Test</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #f5f5f5;
+    color: #222;
+  }
+  h1 { font-size: 22px; margin-bottom: 20px; }
+  h2 { font-size: 16px; margin: 0 0 10px; color: #444; }
+  .panel {
+    background: #fff;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  input, textarea, select, button {
+    font-family: inherit;
+    font-size: 14px;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  button {
+    background: #0066cc;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    width: auto;
+    padding: 8px 18px;
+  }
+  button:hover { background: #0052a3; }
+  button.danger { background: #cc3333; }
+  button.danger:hover { background: #a32929; }
+  button:disabled { background: #999; cursor: not-allowed; }
+  .actions { display: flex; gap: 10px; align-items: center; }
+  .plugin-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #fafafa;
+  }
+  .plugin-card h3 { margin: 0 0 6px; font-size: 15px; color: #0066cc; }
+  .plugin-card p { margin: 0 0 8px; color: #555; font-size: 13px; }
+  .plugin-card .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 8px;
+  }
+  .plugin-card .meta span b { color: #333; }
+  .plugin-card .id { font-family: monospace; font-size: 11px; color: #999; }
+  #pagination {
+    font-size: 13px;
+    color: #666;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+  }
+  #add-output, #delete-output {
+    font-family: monospace;
+    font-size: 12px;
+    background: #f0f0f0;
+    padding: 8px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 10px;
+    min-height: 20px;
+  }
+  .empty { color: #999; font-style: italic; }
+  .status-code {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .s-2xx { background: #d4f0d4; color: #2a6b2a; }
+  .s-4xx { background: #f8dddd; color: #a12d2d; }
+  .s-5xx { background: #fbe3c9; color: #a05a12; }
+</style>
+</head>
+<body>
+
+<h1>Plugin Search &amp; Discovery — Manual Test</h1>
+
+<!-- ============ Server URL ============ -->
+<div class="panel">
+  <h2>Сервер</h2>
+  <div class="grid">
+    <input type="text" id="api-base" value="http://localhost:8080" placeholder="Base URL">
+    <button onclick="checkHealth()">Проверить /health</button>
+  </div>
+  <div id="health-output" style="font-size:13px; color:#666; margin-top:8px;"></div>
+</div>
+
+<!-- ============ Search ============ -->
+<div class="panel">
+  <h2>Поиск</h2>
+  <div class="grid">
+    <input type="text" id="search-q" placeholder="q (подстрока)">
+    <input type="text" id="search-category" placeholder="category">
+    <input type="text" id="search-tags" placeholder="tags (через запятую)">
+    <input type="number" id="search-min-price" placeholder="min_price">
+    <input type="number" id="search-max-price" placeholder="max_price">
+    <input type="number" id="search-min-rating" placeholder="min_rating" step="0.1">
+    <select id="search-sort">
+      <option value="relevance">relevance</option>
+      <option value="price_asc">price_asc</option>
+      <option value="price_desc">price_desc</option>
+      <option value="rating_desc">rating_desc</option>
+      <option value="downloads_desc">downloads_desc</option>
+      <option value="newest">newest</option>
+    </select>
+    <input type="number" id="search-page" placeholder="page" value="1" min="1">
+    <input type="number" id="search-limit" placeholder="limit" value="20" min="1" max="100">
+  </div>
+  <div class="actions">
+    <button onclick="doSearch()">Найти</button>
+    <button onclick="resetSearch()">Сброс</button>
+    <span id="search-status"></span>
+  </div>
+</div>
+
+<!-- ============ Results ============ -->
+<div class="panel">
+  <h2>Результаты</h2>
+  <div id="results"><p class="empty">Введите запрос и нажмите «Найти».</p></div>
+  <div id="pagination"></div>
+</div>
+
+<!-- ============ Add ============ -->
+<div class="panel">
+  <h2>Добавить / обновить плагин (PUT)</h2>
+  <div class="grid">
+    <input type="text" id="add-id" placeholder="ID (UUID, пусто → сгенерировать)">
+    <input type="text" id="add-name" placeholder="name *">
+    <input type="text" id="add-category" placeholder="category *">
+    <input type="text" id="add-tags" placeholder="tags (через запятую)">
+    <input type="number" id="add-price" placeholder="price (копейки)" value="1000">
+    <input type="number" id="add-rating" placeholder="rating 0..5" step="0.01" value="4.5">
+    <input type="number" id="add-downloads" placeholder="downloads" value="0">
+    <select id="add-status">
+      <option value="published">published</option>
+      <option value="draft">draft</option>
+      <option value="archived">archived</option>
+    </select>
+  </div>
+  <textarea id="add-description" placeholder="description *"></textarea>
+  <div class="actions" style="margin-top:10px;">
+    <button onclick="doAdd()">Добавить</button>
+    <span id="add-status-label"></span>
+  </div>
+  <div id="add-output"></div>
+</div>
+
+<!-- ============ Delete by ID ============ -->
+<div class="panel">
+  <h2>Удалить по ID (DELETE)</h2>
+  <div class="grid">
+    <input type="text" id="delete-id" placeholder="UUID плагина">
+    <button class="danger" onclick="doDeleteById()">Удалить</button>
+  </div>
+  <div id="delete-output"></div>
+</div>
+
+<script>
+// ============================================================
+// Утилиты
+// ============================================================
+
+const $ = id => document.getElementById(id);
+
+function base() {
+  return $('api-base').value.trim().replace(/\/$/, '');
+}
+
+function statusBadge(code) {
+  const cls = code >= 200 && code < 300 ? 's-2xx'
+            : code >= 400 && code < 500 ? 's-4xx'
+            : 's-5xx';
+  return `<span class="status-code ${cls}">HTTP ${code}</span>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => (
+    { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]
+  ));
+}
+
+function showStatus(el, code, text) {
+  el.innerHTML = `${statusBadge(code)} ${escapeHtml(text || '')}`;
+}
+
+// ============================================================
+// Health
+// ============================================================
+
+async function checkHealth() {
+  const out = $('health-output');
+  out.textContent = '...';
+  try {
+    const r = await fetch(`${base()}/health`);
+    const t = await r.text();
+    out.innerHTML = `${statusBadge(r.status)} <code>${escapeHtml(t)}</code>`;
+  } catch (e) {
+    out.textContent = `Ошибка: ${e.message}`;
+  }
+}
+
+// ============================================================
+// Search
+// ============================================================
+
+async function doSearch() {
+  const params = new URLSearchParams();
+  const q = $('search-q').value.trim();
+  if (q) params.set('q', q);
+  const cat = $('search-category').value.trim();
+  if (cat) params.set('category', cat);
+  const tags = $('search-tags').value.trim();
+  if (tags) params.set('tags', tags);
+  const minPrice = $('search-min-price').value.trim();
+  if (minPrice) params.set('min_price', minPrice);
+  const maxPrice = $('search-max-price').value.trim();
+  if (maxPrice) params.set('max_price', maxPrice);
+  const minRating = $('search-min-rating').value.trim();
+  if (minRating) params.set('min_rating', minRating);
+  params.set('sort', $('search-sort').value);
+  params.set('page', $('search-page').value || '1');
+  params.set('limit', $('search-limit').value || '20');
+
+  const statusEl = $('search-status');
+  statusEl.textContent = '...';
+
+  try {
+    const r = await fetch(`${base()}/api/v1/plugins/search?${params}`);
+    const text = await r.text();
+    showStatus(statusEl, r.status, '');
+
+    if (!r.ok) {
+      $('results').innerHTML = `<pre style="color:#a12d2d;">${escapeHtml(text)}</pre>`;
+      $('pagination').textContent = '';
+      return;
+    }
+
+    const data = JSON.parse(text);
+    renderResults(data);
+  } catch (e) {
+    statusEl.textContent = `Ошибка: ${e.message}`;
+  }
+}
+
+function renderResults(data) {
+  const container = $('results');
+  if (!data.items || data.items.length === 0) {
+    container.innerHTML = '<p class="empty">Ничего не найдено.</p>';
+    $('pagination').textContent =
+      `Всего: ${data.total ?? 0}`;
+    return;
+  }
+
+  container.innerHTML = data.items.map(p => `
+    <div class="plugin-card">
+      <h3>${escapeHtml(p.name)}</h3>
+      <p>${escapeHtml(p.description)}</p>
+      <div class="meta">
+        <span><b>category:</b> ${escapeHtml(p.category)}</span>
+        <span><b>tags:</b> ${(p.tags || []).map(escapeHtml).join(', ') || '—'}</span>
+        <span><b>price:</b> ${p.price}</span>
+        <span><b>rating:</b> ${p.rating}</span>
+        <span><b>downloads:</b> ${p.downloads}</span>
+        <span><b>status:</b> ${escapeHtml(p.status)}</span>
+      </div>
+      <div class="id">id: ${p.id}</div>
+      <div style="margin-top:8px;">
+        <button class="danger" onclick="doDelete('${p.id}')">Удалить</button>
+      </div>
+    </div>
+  `).join('');
+
+  $('pagination').textContent =
+    `Страница ${data.page} из ${data.total_pages}, лимит ${data.limit}, всего ${data.total}`;
+}
+
+function resetSearch() {
+  ['search-q','search-category','search-tags','search-min-price','search-max-price','search-min-rating']
+    .forEach(id => $(id).value = '');
+  $('search-sort').value = 'relevance';
+  $('search-page').value = 1;
+  $('search-limit').value = 20;
+  $('results').innerHTML = '<p class="empty">Введите запрос и нажмите «Найти».</p>';
+  $('pagination').textContent = '';
+  $('search-status').textContent = '';
+}
+
+// ============================================================
+// Add / Update
+// ============================================================
+
+async function doAdd() {
+  let id = $('add-id').value.trim();
+  if (!id) {
+    id = crypto.randomUUID();
+    $('add-id').value = id;
+  }
+
+  const body = {
+    name: $('add-name').value.trim(),
+    description: $('add-description').value.trim(),
+    category: $('add-category').value.trim(),
+    tags: $('add-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+    price: parseInt($('add-price').value || '0', 10),
+    rating: parseFloat($('add-rating').value || '0'),
+    downloads: parseInt($('add-downloads').value || '0', 10),
+    status: $('add-status').value,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (!body.name || !body.description || !body.category) {
+    alert('Заполните name, description, category');
+    return;
+  }
+
+  try {
+    const r = await fetch(`${base()}/api/v1/index/plugins/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const text = await r.text();
+    showStatus($('add-status-label'), r.status, '');
+    $('add-output').textContent =
+      `${r.status} ${r.statusText}\n${text}`;
+  } catch (e) {
+    $('add-output').textContent = `Ошибка: ${e.message}`;
+  }
+}
+
+// ============================================================
+// Delete
+// ============================================================
+
+async function doDelete(id) {
+  if (!confirm(`Удалить плагин ${id}?`)) return;
+  try {
+    const r = await fetch(`${base()}/api/v1/index/plugins/${id}`, { method: 'DELETE' });
+    if (r.ok) {
+      // обновляем результаты
+      doSearch();
+    } else {
+      alert(`HTTP ${r.status}\n${await r.text()}`);
+    }
+  } catch (e) {
+    alert(`Ошибка: ${e.message}`);
+  }
+}
+
+async function doDeleteById() {
+  const id = $('delete-id').value.trim();
+  if (!id) { alert('Введите UUID'); return; }
+
+  try {
+    const r = await fetch(`${base()}/api/v1/index/plugins/${id}`, { method: 'DELETE' });
+    const text = await r.text();
+    $('delete-output').textContent =
+      `${r.status} ${r.statusText}\n${text || '(no content)'}`;
+  } catch (e) {
+    $('delete-output').textContent = `Ошибка: ${e.message}`;
+  }
+}
+
+// ============================================================
+// Init
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+  checkHealth();
+});
+</script>
+
+</body>
+</html>

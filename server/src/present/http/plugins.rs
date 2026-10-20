@@ -4,13 +4,15 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use axum::extract::Path;
+use chrono::{DateTime, FixedOffset};
 use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::app::state::AppState;
 use crate::dom::plugins::errors::PluginError;
-use crate::dom::plugins::model::{Plugin, SearchCriteria, SortOrder, MAX_LIMIT};
+use crate::dom::plugins::model::{Plugin, PluginId, PluginStatus, SearchCriteria, SortOrder, UpsertOutcome, MAX_LIMIT};
 use crate::shared::Page;
 
 /// DTO query-параметров поиска.
@@ -26,6 +28,25 @@ pub struct SearchQuery {
     pub sort: Option<String>,
     pub page: Option<u32>,
     pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IndexPluginRequest {
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub price: i32,
+    pub rating: rust_decimal::Decimal,
+    pub downloads: i64,
+    pub status: String,
+    pub updated_at: DateTime<FixedOffset>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IndexResponse {
+    pub outcome: &'static str,
 }
 
 fn deserialize_tags<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
@@ -126,6 +147,64 @@ fn parse_sort(sort: &Option<String>) -> Result<SortOrder, ApiError> {
     }
 }
 
+pub async fn index_plugin(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<IndexPluginRequest>,
+) -> Result<(StatusCode, Json<IndexResponse>), ApiError> {
+    let status = match body.status.as_str() {
+        "draft" => PluginStatus::Draft,
+        "published" => PluginStatus::Published,
+        "archived" => PluginStatus::Archived,
+        other => {
+            return Err(ApiError::validation(format!(
+                "unknown status: {other}"
+            )))
+        }
+    };
+
+    let plugin = Plugin {
+        id: PluginId::new(id),
+        name: body.name,
+        description: body.description,
+        category: body.category,
+        tags: body.tags,
+        price: body.price,
+        rating: body.rating,
+        downloads: body.downloads,
+        status,
+        updated_at: body.updated_at,
+    };
+
+    let outcome = state
+        .plugin_search
+        .index_plugin(plugin)
+        .await
+        .map_err(ApiError::from)?;
+
+    let (http_status, label) = match outcome {
+        UpsertOutcome::Created => (StatusCode::CREATED, "created"),
+        UpsertOutcome::Updated => (StatusCode::OK, "updated"),
+        UpsertOutcome::NoOp => (StatusCode::OK, "noop"),
+        UpsertOutcome::Stale => (StatusCode::CONFLICT, "stale"),
+        UpsertOutcome::Conflict => (StatusCode::CONFLICT, "conflict"),
+    };
+
+    Ok((http_status, Json(IndexResponse { outcome: label })))
+}
+
+pub async fn delete_plugin(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .plugin_search
+        .delete_plugin(PluginId::new(id))
+        .await
+        .map_err(ApiError::from)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Ошибка API с HTTP-статусом.
 #[derive(Debug)]
 pub struct ApiError {
@@ -193,13 +272,16 @@ impl From<Plugin> for PluginResponse {
         }
     }
 }
+
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
 
     use axum::body::Body;
+    use axum::extract::Path;
     use axum::http::{Request, StatusCode};
-    use chrono::Utc;
+    use chrono::{DateTime, FixedOffset, Utc};
     use rust_decimal::Decimal;
     use tower::ServiceExt;
     use uuid::Uuid;
@@ -207,13 +289,10 @@ mod tests {
     use super::*;
     use crate::app::state::{AppState, PluginSearch};
     use crate::dom::plugins::errors::PluginError;
-    use crate::dom::plugins::model::{
-        Plugin, PluginId, PluginStatus, SearchCriteria, SortOrder, MAX_LIMIT,
-    };
+    use crate::dom::plugins::model::{Plugin, PluginId, PluginStatus, SearchCriteria, SortOrder, UpsertOutcome, MAX_LIMIT};
     use crate::present::http::routes;
     use crate::shared::Page;
 
-    // ---------- Мок ----------
 
     struct MockSearch {
         received: Mutex<Option<SearchCriteria>>,
@@ -253,15 +332,19 @@ mod tests {
                 .take()
                 .expect("MockSearch::search called more than once")
         }
+
+        async fn index_plugin(&self, plugin: Plugin) -> Result<UpsertOutcome, PluginError> {
+            todo!()
+        }
+
+        async fn delete_plugin(&self, id: PluginId) -> Result<(), PluginError> {
+            todo!()
+        }
     }
 
-    // ---------- Хелперы ----------
 
     fn build_router(mock: Arc<MockSearch>) -> axum::Router {
-        // Unsized coercion: Arc<MockSearch> → Arc<dyn PluginSearch>
         let search: Arc<dyn PluginSearch> = mock;
-        // Поле `AppState::plugin_search` публичное — конструируем литералом,
-        // минуя `AppState::new`, который требует конкретный `PluginSearchService<C>`.
         let state = AppState {
             plugin_search: search,
         };
@@ -299,7 +382,8 @@ mod tests {
         serde_json::from_slice(&bytes).unwrap()
     }
 
-    // ---------- Unit: parse_sort ----------
+
+    //Parse sort
 
     #[test]
     fn parse_sort_none_is_relevance() {
@@ -329,7 +413,7 @@ mod tests {
         assert!(err.message.contains("banana"));
     }
 
-    // ---------- Unit: ApiError mapping ----------
+    //ApiError mapping
 
     #[test]
     fn api_error_from_not_found_is_404() {
@@ -376,7 +460,7 @@ mod tests {
         assert_eq!(e.message, "nope");
     }
 
-    // ---------- Unit: PluginResponse ----------
+    //PluginResponse
 
     #[test]
     fn plugin_response_from_plugin() {
@@ -389,7 +473,7 @@ mod tests {
         assert_eq!(dto.downloads, 12_500);
     }
 
-    // ---------- HTTP: успешные сценарии ----------
+    //HTTP
 
     #[tokio::test]
     async fn search_returns_200_with_items() {
@@ -456,7 +540,7 @@ mod tests {
         let received = mock.received().unwrap();
         assert_eq!(received.limit, MAX_LIMIT);
     }
-///!Работает только для разделителя запятой, нет поиска при множестве `?tags=abc&tags=zxc`
+    //Работает только для разделителя запятой, нет поиска при множестве `?tags=abc&tags=zxc`
     #[tokio::test]
     async fn search_parses_tags_comma_separated() {
         let mock = MockSearch::ok(empty_page());
@@ -488,7 +572,7 @@ mod tests {
         assert_eq!(received.min_rating, Some(Decimal::new(45, 1)));
     }
 
-    // ---------- HTTP: ошибки ----------
+    //HTTP ошибки
 
     #[tokio::test]
     async fn search_unknown_sort_returns_400() {
@@ -553,7 +637,7 @@ mod tests {
         assert!(!json["error"].as_str().unwrap().contains("db exploded"));
     }
 
-    // ---------- HTTP: роутинг ----------
+    //HTTP роутинг
 
     #[tokio::test]
     async fn health_returns_ok() {
